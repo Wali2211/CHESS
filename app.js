@@ -24,12 +24,16 @@ let lastLocalMoveAt = 0;
 let refreshTimer = null;
 let toastTimer = null;
 let aiMode = false;
-let aiLevel = 'beginner';
+let aiLevel = 'intermediate';
 let aiColor = 'b';
 let aiWorker = null;
 let aiThinking = false;
 let aiRequestId = 0;
 const AI_LEVELS = { beginner:'Beginner', intermediate:'Intermediate', expert:'Expert' };
+const soundKey = 'wchess-sound';
+let soundEnabled = localStorage.getItem(soundKey) !== 'off';
+let audioContext = null;
+let animateMove = false;
 
 async function api(path, options={}) {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'content-type':'application/json', ...(options.headers || {}) } });
@@ -40,15 +44,15 @@ async function api(path, options={}) {
 function post(path, body) { return api(path, { method:'POST', body:JSON.stringify(body) }); }
 
 function resultText() {
-  if (game.isCheckmate()) return { title: aiMode ? (game.turn()===aiColor?'You win':'WChess AI wins') : `${colors[game.turn() === 'w' ? 'b' : 'w']} wins`, detail:'Checkmate. A well-played finish. Start a new game for another round.', over:true };
-  if (game.isStalemate()) return { title:'Draw by stalemate', detail:'No legal moves, but the king is safe. An even finish.', over:true };
-  if (game.isThreefoldRepetition()) return { title:'Draw by repetition', detail:'The same position has appeared three times.', over:true };
-  if (game.isInsufficientMaterial()) return { title:'Draw — not enough pieces', detail:'Neither side has enough material to deliver checkmate.', over:true };
-  if (game.isDraw()) return { title:'Game drawn', detail:'The fifty-move rule ends this game in a draw.', over:true };
-  if (activeMatchId && matchMeta?.status === 'open') return { title:'Waiting for a player', detail:'Your match is ready. Share the invite link or wait for someone to join.', over:false };
-  let detail = game.isCheck() ? 'Your king is in check. Choose a legal move to make it safe.' : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} selected. Choose a highlighted square.` : game.history().length ? 'Take a breath. Find your next move.' : 'The board is yours. Select a piece to see its legal moves.';
-  if (activeMatchId && myColor !== game.turn()) detail = `Waiting for ${matchMeta?.[game.turn() === 'w' ? 'hostName' : 'guestName'] || 'your opponent'} to move.`;
-  if (aiMode) detail = game.turn()===aiColor ? (aiThinking ? `${AI_LEVELS[aiLevel]} AI is thinking…` : `${AI_LEVELS[aiLevel]} AI to move.`) : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} selected. Choose a highlighted square.` : 'Your move. Choose a move; the computer will reply automatically.';
+  if (game.isCheckmate()) return { title: aiMode ? (game.turn()===aiColor?'You got me':'WChess AI takes this one') : `${colors[game.turn() === 'w' ? 'b' : 'w']} wins`, detail:'That was a fine finish. Fancy another?', over:true };
+  if (game.isStalemate()) return { title:'A draw by stalemate', detail:'No legal moves, and no check. The game ends level.', over:true };
+  if (game.isThreefoldRepetition()) return { title:'A draw by repetition', detail:'The same position came around three times.', over:true };
+  if (game.isInsufficientMaterial()) return { title:'A draw — not enough pieces', detail:'Neither side has enough left to force checkmate.', over:true };
+  if (game.isDraw()) return { title:'A draw', detail:'Fifty moves without a pawn move or capture. Fair enough.', over:true };
+  if (activeMatchId && matchMeta?.status === 'open') return { title:'Your table is ready', detail:'Send the invite to a friend, or keep an eye out for them.', over:false };
+  let detail = game.isCheck() ? 'Your king is under threat. Find a safe square.' : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : game.history().length ? 'No rush. Look over the board and choose your move.' : 'White has the first move. Select a piece to see your options.';
+  if (activeMatchId && myColor !== game.turn()) detail = `Waiting for ${matchMeta?.[game.turn() === 'w' ? 'hostName' : 'guestName'] || 'your opponent'} to make a move.`;
+  if (aiMode) detail = game.turn()===aiColor ? (aiThinking ? `${AI_LEVELS[aiLevel]} is thinking…` : `${AI_LEVELS[aiLevel]} is ready when you are.`) : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : 'Your move. The computer will take its turn after you.';
   const title=aiMode ? (game.turn()===aiColor ? `${AI_LEVELS[aiLevel]} AI to move` : 'Your move') : `${colors[game.turn()]} to move`;
   return { title:`${title}${game.isCheck() ? ' — check' : ''}`, detail, over:false };
 }
@@ -59,6 +63,7 @@ function render() {
   const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
   const files = flipped ? 'hgfedcba' : 'abcdefgh';
   const targets = new Set(legal.map(move => move.to));
+  const moving = animateMove;
   const fragment = document.createDocumentFragment();
   ranks.forEach((rank, row) => [...files].forEach((file, col) => {
     const square = `${file}${rank}`;
@@ -67,6 +72,7 @@ function render() {
     button.type = 'button';
     button.className = `square ${(file.charCodeAt(0) - 97 + rank) % 2 ? 'dark' : 'light'}`;
     if (last && (last.from === square || last.to === square)) button.classList.add('last');
+    if (moving && last?.to === square) button.classList.add('arriving', ...(last.captured ? ['capture-moment'] : []));
     if (selected === square) button.classList.add('selected');
     if (targets.has(square)) button.classList.add('legal', ...(piece ? ['capture'] : []));
     if (piece && piece.type === 'k' && piece.color === game.turn() && game.isCheck()) button.classList.add('checked');
@@ -86,15 +92,29 @@ function render() {
     fragment.append(button);
   }));
   board.replaceChildren(fragment);
+  if (moving && last?.from && last?.to) {
+    const source=board.querySelector(`[data-square="${last.from}"]`);
+    const piece=board.querySelector(`[data-square="${last.to}"] .piece`);
+    if (source && piece) {
+      const from=source.getBoundingClientRect(), to=piece.getBoundingClientRect();
+      if (typeof piece.animate==='function') piece.animate([
+        { transform:`translate(${from.left-to.left}px, ${from.top-to.top}px) scale(.88)`, opacity:.75 },
+        { transform:'translateY(-1px) scale(1)', opacity:1 }
+      ],{ duration:360, easing:'cubic-bezier(.2,.86,.22,1.13)' });
+      else piece.classList.add('arriving');
+    }
+  }
+  animateMove = false;
   board.setAttribute('aria-label', `Chessboard, ${flipped ? 'Black' : 'White'} at bottom`);
   const status = resultText();
   $('status').textContent=status.title;
   $('status-detail').textContent=status.detail;
-  $('game-badge').textContent=activeMatchId ? (matchMeta?.status === 'open' ? 'Waiting for player' : 'Online match') : aiMode ? `${AI_LEVELS[aiLevel]} AI` : status.over ? 'Game complete' : 'In progress';
+  $('game-badge').textContent=activeMatchId ? (matchMeta?.status === 'open' ? 'Waiting for player' : 'Online match') : aiMode ? `${AI_LEVELS[aiLevel]} AI` : status.over ? 'That’s the game' : history.length ? 'A game in progress' : 'Ready for the first move';
   $('move-number').textContent=`Move ${Math.floor(history.length / 2) + 1}`;
   $('turn-icon').textContent=symbols[game.turn()].k;
   $('turn-icon').style.background=game.turn() === 'w' ? '#d9e2c5' : '#344b3d';
   $('turn-icon').style.color=game.turn() === 'w' ? '#203729' : '#dce5ce';
+  updateSoundButton();
   $('undo').disabled=!history.length || !!activeMatchId || aiThinking;
   updatePlayer('top-player', flipped ? 'w' : 'b', status.over);
   updatePlayer('bottom-player', flipped ? 'b' : 'w', status.over);
@@ -116,7 +136,7 @@ function renderHistory(history) {
   $('history-count').textContent=`${history.length} ${history.length===1 ? 'move' : 'moves'}`;
   const container=$('history');
   if (!history.length) {
-    container.innerHTML='<div class="history-empty"><span class="empty-symbol" aria-hidden="true">↗</span><p>Every great game<br>starts somewhere.</p></div>';
+    container.innerHTML='<div class="history-empty"><span class="empty-symbol" aria-hidden="true">♘</span><p>The first move is yours.</p></div>';
     return;
   }
   const fragment=document.createDocumentFragment();
@@ -156,8 +176,11 @@ function onSquare(square) {
 }
 
 function playMove(move) {
-  try { game.move(move); }
+  let played;
+  try { played = game.move(move); }
   catch { return; }
+  animateMove=true;
+  playSound(game.isGameOver() ? 'finish' : played?.captured ? 'capture' : game.isCheck() ? 'check' : 'move');
   selected=null; legal=[]; pending=null;
   $('promotion').hidden=true;
   render();
@@ -185,6 +208,34 @@ function notify(message) {
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>toast.classList.remove('show'),3200);
 }
+function updateSoundButton() {
+  const button=$('sound-toggle');
+  if (!button) return;
+  button.setAttribute('aria-pressed',String(soundEnabled));
+  button.setAttribute('aria-label',soundEnabled?'Turn sound off':'Turn sound on');
+  button.title=soundEnabled?'Sound effects are on':'Sound effects are off';
+  $('sound-label').textContent=soundEnabled?'Sound on':'Sound off';
+}
+function playSound(kind='move') {
+  if (!soundEnabled) return;
+  const AudioContextClass=window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    audioContext ||= new AudioContextClass();
+    if (audioContext.state==='suspended') audioContext.resume();
+    const now=audioContext.currentTime;
+    const notes=kind==='capture'?[{frequency:250,delay:0,duration:.13,volume:.045},{frequency:370,delay:.035,duration:.1,volume:.025}]
+      :kind==='check'?[{frequency:520,delay:0,duration:.12,volume:.035},{frequency:690,delay:.07,duration:.16,volume:.028}]
+      :kind==='finish'?[{frequency:392,delay:0,duration:.2,volume:.028},{frequency:494,delay:.12,duration:.2,volume:.025},{frequency:587,delay:.24,duration:.28,volume:.022}]
+      :[{frequency:335,delay:0,duration:.085,volume:.032},{frequency:465,delay:.018,duration:.07,volume:.018}];
+    for (const note of notes) {
+      const start=now+note.delay, oscillator=audioContext.createOscillator(), gain=audioContext.createGain();
+      oscillator.type='triangle'; oscillator.frequency.setValueAtTime(note.frequency,start);
+      gain.gain.setValueAtTime(.0001,start); gain.gain.exponentialRampToValueAtTime(note.volume,start+.012); gain.gain.exponentialRampToValueAtTime(.0001,start+note.duration);
+      oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(start); oscillator.stop(start+note.duration+.015);
+    }
+  } catch { /* Sound is an enhancement; the game should still work if audio is unavailable. */ }
+}
 function safeText(value) { return String(value || '').replace(/[<>\u0000-\u001f]/g,'').slice(0,80); }
 function empty(message) { const div=document.createElement('div'); div.className='lobby-empty'; div.textContent=message; return div; }
 function personRow(person, action, actionText, disabled=false) {
@@ -200,7 +251,7 @@ function personRow(person, action, actionText, disabled=false) {
   row.append(info,button); return row;
 }
 function switchTab(tab) {
-  document.querySelectorAll('.lobby-tab').forEach(button=>button.classList.toggle('active',button.dataset.tab===tab));
+  document.querySelectorAll('.lobby-tab').forEach(button=>{ const active=button.dataset.tab===tab; button.classList.toggle('active',active); button.setAttribute('aria-selected',String(active)); });
   $('people-tab').hidden=tab!=='people'; $('matches-tab').hidden=tab!=='matches';
 }
 function renderPlayers(data) {
@@ -281,7 +332,10 @@ async function pollMatch() {
     if (previousStatus!==match.status || previousGuest!==match.guestId) render();
     const pgn=match.pgn || '';
     if (pgn !== lastSyncedPgn && Date.now()-lastLocalMoveAt>900) {
+      const previousMoveCount=game.history().length;
       if (pgn) game.loadPgn(pgn); else game.reset();
+      const syncedHistory=game.history({verbose:true});
+      if (syncedHistory.length>previousMoveCount) { const latest=syncedHistory.at(-1); animateMove=true; playSound(game.isGameOver()?'finish':latest.captured?'capture':game.isCheck()?'check':'move'); }
       lastSyncedPgn=pgn; selected=null; legal=[]; pending=null; $('promotion').hidden=true; render();
     } else if (pgn === game.pgn()) lastSyncedPgn=pgn;
   } catch (error) {
@@ -367,15 +421,18 @@ function scheduleAiMove() {
     if (requestId!==aiRequestId) { worker.terminate(); return; }
     worker.terminate(); aiWorker=null; aiThinking=false;
     if (event.data.error || !event.data.move) { render(); notify(event.data.error || 'The AI could not find a move. Start a new game to try again.'); return; }
-    try { game.move(event.data.move); }
+    let played;
+    try { played=game.move(event.data.move); }
     catch { render(); notify('The AI returned an invalid move. Please start a new game.'); return; }
+    animateMove=true;
+    playSound(game.isGameOver()?'finish':played?.captured?'capture':game.isCheck()?'check':'move');
     render();
   };
   worker.onerror=()=>{ if(requestId!==aiRequestId)return; worker.terminate(); aiWorker=null; aiThinking=false; render(); notify('The AI worker stopped unexpectedly. Please try again.'); };
   worker.postMessage({pgn:game.pgn(),level:aiLevel});
 }
 async function startAiGame() {
-  const selectedLevel=document.querySelector('.ai-level.selected')?.dataset.level || 'beginner';
+  const selectedLevel=document.querySelector('.ai-level.selected')?.dataset.level || 'intermediate';
   const humanColor=$('ai-color').value==='b'?'b':'w';
   cancelAi();
   if (activeMatchId) await leaveOnlineMatch(false);
@@ -396,6 +453,7 @@ function undoMove() {
 
 $('undo').addEventListener('click',undoMove);
 $('flip').addEventListener('click',()=>{ flipped=!flipped; render(); });
+$('sound-toggle').addEventListener('click',()=>{ soundEnabled=!soundEnabled; localStorage.setItem(soundKey,soundEnabled?'on':'off'); updateSoundButton(); if(soundEnabled) playSound('move'); });
 $('new-game').addEventListener('click',async()=>{ if (activeMatchId) await leaveOnlineMatch(false); cancelAi(); game.reset(); selected=null; legal=[]; pending=null; $('promotion').hidden=true; render(); if(aiMode && aiColor==='w') scheduleAiMove(); });
 $('open-lobby').addEventListener('click',async()=>{ $('display-name').value=displayName; $('player-id-label').textContent=playerId.slice(0,8).toUpperCase(); $('lobby').hidden=false; switchTab('people'); await heartbeat(); await refreshSocial(); });
 $('open-ai').addEventListener('click',()=>{ $('ai-modal').hidden=false; document.querySelector('.ai-level.selected')?.focus(); });

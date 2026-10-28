@@ -8,6 +8,14 @@ WChess is a browser chess club with online presence, friend requests, hosted two
 npm start
 ```
 
+## Run the checks
+
+```sh
+npm test
+```
+
+The built-in AI checks cover mate in one, taking a hanging queen, and responding to a checking rook at every difficulty level. They use Node's test runner and add no runtime dependencies.
+
 ## Render free demo
 
 Use a Node web service with build command `npm install` and start command `npm start`. The free demo stores social state at `/tmp/wchess-data.json`; Render’s free web-service filesystem is ephemeral, so player, friend, and match data can reset when the service sleeps, restarts, or redeploys.
