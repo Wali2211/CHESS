@@ -1,0 +1,21 @@
+name: Keep WChess warm
+
+on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: wchess-keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Ping the Render health endpoint
+        env:
+          WCHESS_URL: https://wchess-live.onrender.com
+        run: curl --fail --silent --show-error --max-time 110 "${WCHESS_URL}/api/health"
