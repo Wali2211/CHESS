@@ -112,8 +112,8 @@ function render() {
   $('game-badge').textContent=activeMatchId ? (matchMeta?.status === 'open' ? 'Waiting for player' : 'Online match') : aiMode ? `${AI_LEVELS[aiLevel]} AI` : status.over ? 'That’s the game' : history.length ? 'A game in progress' : 'Ready for the first move';
   $('move-number').textContent=`Move ${Math.floor(history.length / 2) + 1}`;
   $('turn-icon').textContent=symbols[game.turn()].k;
-  $('turn-icon').style.background=game.turn() === 'w' ? '#d9e2c5' : '#344b3d';
-  $('turn-icon').style.color=game.turn() === 'w' ? '#203729' : '#dce5ce';
+  $('turn-icon').style.background=game.turn() === 'w' ? '#f0dec9' : '#4a304a';
+  $('turn-icon').style.color=game.turn() === 'w' ? '#402b3a' : '#f8ece3';
   updateSoundButton();
   $('undo').disabled=!history.length || !!activeMatchId || aiThinking;
   updatePlayer('top-player', flipped ? 'w' : 'b', status.over);
