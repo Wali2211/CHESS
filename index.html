@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#190f1d">
-  <meta name="description" content="A relaxed place to play chess. Challenge a friend, meet a player, or take on the computer.">
+  <meta name="theme-color" content="#071813">
+  <meta name="description" content="Play WChess online or against the computer, rotate a 3D chessboard, and train with 59 tactical patterns.">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./layout.css?v=7">
+  <link rel="stylesheet" href="./layout.css?v=8">
   <title>WChess — A good game starts here</title>
 </head>
 <body>
@@ -19,6 +19,7 @@
     </a>
     <div class="header-actions">
       <div class="online-indicator"><span class="tiny-dot" aria-hidden="true"></span><span id="online-count">0 online</span></div>
+      <button class="header-cta training-cta" id="open-training" type="button"><span aria-hidden="true">✦</span> Tactics</button>
       <button class="header-cta ai-cta" id="open-ai" type="button"><span aria-hidden="true">♟</span> Play the computer</button>
       <button class="header-cta" id="open-lobby" type="button"><span aria-hidden="true">＋</span> Find a player</button>
     </div>
@@ -31,7 +32,7 @@
         <h1 id="page-title">Pull up a chair.<br><em>Your next move awaits.</em></h1>
       </div>
       <div class="intro-aside">
-        <p>Play a friend, meet someone new, or take on the computer. No fuss. Just chess.</p>
+        <p>Play a friend, meet someone new, take on the computer, or sharpen your eye with a tactical lesson.</p>
         <span class="intro-note"><span aria-hidden="true">✳</span> No account needed to get started</span>
       </div>
     </section>
@@ -43,7 +44,7 @@
           <div class="player-identity"><span class="player-avatar black" aria-hidden="true">♟</span><span class="player-name">Black</span><span class="player-tag">The challenger</span></div>
           <span class="turn-label" id="top-turn"><span class="tiny-dot" aria-hidden="true"></span> To move</span>
         </div>
-        <div class="board-shell"><div class="board" id="board" role="group" aria-label="Chessboard, White at bottom"></div></div>
+        <div class="board-stage" id="board-stage"><div class="board-shell mode-3d" id="board-shell"><div class="board" id="board" role="group" aria-label="Chessboard, White at bottom"></div></div></div>
         <div class="player-line bottom" id="bottom-player">
           <div class="player-identity"><span class="player-avatar" aria-hidden="true">♙</span><span class="player-name">White</span><span class="player-tag">The first move</span></div>
           <span class="turn-label active" id="bottom-turn"><span class="tiny-dot" aria-hidden="true"></span> To move</span>
@@ -52,10 +53,27 @@
           <span class="guide"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v8l2-3a2 2 0 0 1 3 2l-3 8H8l-4-7a2 2 0 0 1 3-2l2 2"/></svg><span>Choose a piece, then a square.</span></span>
           <div class="board-tools" aria-label="Board controls">
             <button class="tool-button" id="undo" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h10a6 6 0 0 1 0 12M4 9l5-5M4 9l5 5"/></svg><span>Undo</span></button>
-            <button class="tool-button" id="flip" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 0 1 14-5l2 2M20 3v4h-4M20 14A8 8 0 0 1 6 19l-2-2M4 21v-4h4"/></svg><span>Flip board</span></button>
+            <button class="tool-button" id="flip" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10a8 8 0 0 1 14-5l2 2M20 3v4h-4M20 14A8 8 0 0 1 6 19l-2-2M4 21v-4h4"/></svg><span>Turn table</span></button>
+            <button class="tool-button" id="view-3d" type="button" aria-pressed="true"><span aria-hidden="true">◇</span><span>3D view</span></button>
             <button class="tool-button sound-button" id="sound-toggle" type="button" aria-pressed="true" aria-label="Turn sound off"><svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path class="sound-wave" d="M16 9a5 5 0 0 1 0 6m2-9a9 9 0 0 1 0 12"/></svg><span id="sound-label">Sound on</span></button>
           </div>
         </div>
+        <details class="board-settings">
+          <summary>Board &amp; study tools</summary>
+          <div class="settings-grid">
+            <label>Board theme<select id="board-theme"><option value="jade">Jade &amp; ivory</option><option value="ocean">Deep ocean</option><option value="amethyst">Amethyst</option><option value="walnut">Walnut classic</option></select></label>
+            <label>3D tilt<input id="tilt-slider" type="range" min="0" max="14" value="6" aria-label="3D board tilt"></label>
+            <label>Move sound<input id="sound-volume" type="range" min="0" max="1" step="0.05" value="0.65" aria-label="Move sound volume"></label>
+            <div class="settings-actions">
+              <button class="tool-button" id="coords-toggle" type="button" aria-pressed="true">Coordinates on</button>
+              <button class="tool-button" id="hints-toggle" type="button" aria-pressed="true">Move hints on</button>
+              <button class="tool-button" id="last-toggle" type="button" aria-pressed="true">Last move on</button>
+              <button class="tool-button" id="coach-hint" type="button">Coach hint</button>
+              <button class="tool-button" id="copy-fen" type="button">Copy FEN</button>
+              <button class="tool-button" id="copy-pgn" type="button">Copy PGN</button>
+            </div>
+          </div>
+        </details>
       </section>
 
       <aside class="side" aria-label="Game details">
@@ -68,18 +86,19 @@
         </section>
         <div class="history-head"><div><span class="section-label">The game so far</span><span class="history-caption">Your moves, in order.</span></div><span class="history-count" id="history-count">0 moves</span></div>
         <div class="history" id="history" aria-label="Move history"><div class="history-empty"><span class="empty-symbol" aria-hidden="true">♘</span><p>The first move is yours.</p></div></div>
+        <div class="game-stats" aria-label="Game statistics"><span><strong id="stat-plies">0</strong><small>plies</small></span><span><strong id="stat-captures">0</strong><small>captures</small></span><span><strong id="stat-checks">0</strong><small>checks</small></span><span><strong id="stat-material">0</strong><small>material</small></span></div>
         <div class="new-game-wrap"><button class="new-game" id="new-game" type="button"><span aria-hidden="true">＋</span> New game</button></div>
         <div class="local-note"><span class="note-icon" aria-hidden="true">✦</span><p><strong>Chess, without the ceremony.</strong><br>Play locally, invite a friend, or join a game. No sign-up required.</p></div>
       </aside>
     </div>
-    <footer class="footer"><span class="footer-made"><span class="footer-knight" aria-hidden="true">♞</span>Created by Muhammed Wali bin Ismail</span><a class="app-download" href="/downloads/WChess.apk" download="WChess-1.5.apk">↓ Download Android app <small>v1.5</small></a><span class="footer-note"><span aria-hidden="true">✧</span>64 squares. No hurry.</span></footer>
+    <footer class="footer"><span class="footer-made"><span class="footer-knight" aria-hidden="true">♞</span>Created by Muhammed Wali bin Ismail</span><a class="app-download" href="/downloads/WChess.apk" download="WChess-1.6.apk">↓ Download Android app <small>v1.6</small></a><span class="footer-note"><span aria-hidden="true">✧</span>64 squares. No hurry.</span></footer>
   </main>
 
   <div class="lobby-backdrop" id="lobby" hidden>
     <section class="lobby-dialog" role="dialog" aria-modal="true" aria-labelledby="lobby-title">
       <div class="lobby-top"><div><p class="eyebrow">The WChess club</p><h2 id="lobby-title">Who’s up for a game?</h2><p class="lobby-subtitle">Find a player, keep in touch, or pick up an open match.</p></div><button class="lobby-close" id="close-lobby" type="button" aria-label="Close">×</button></div>
       <div class="profile-row"><label for="display-name">Your name at the table</label><div class="profile-controls"><input id="display-name" maxlength="22" autocomplete="nickname" placeholder="Choose a name"><button id="save-name" type="button">Save name</button></div><small>Your player ID: <span id="player-id-label"></span></small></div>
-      <div class="lobby-tabs" role="tablist" aria-label="Club sections"><button type="button" class="lobby-tab active" data-tab="people" role="tab" aria-selected="true">Players & friends</button><button type="button" class="lobby-tab" data-tab="matches" role="tab" aria-selected="false">Matches</button></div>
+      <div class="lobby-tabs" role="tablist" aria-label="Club sections"><button type="button" class="lobby-tab active" data-tab="people" role="tab" aria-selected="true">Players &amp; friends</button><button type="button" class="lobby-tab" data-tab="matches" role="tab" aria-selected="false">Matches</button></div>
       <div class="lobby-content" id="people-tab" role="tabpanel"><div class="lobby-grid"><section class="lobby-card"><div class="lobby-card-head"><h3>Playing now</h3><span id="online-label">0 online</span></div><div class="lobby-list" id="players-list"></div></section><section class="lobby-card"><div class="lobby-card-head"><h3>Friend requests</h3><span id="request-count">0</span></div><div class="lobby-list" id="requests-list"></div><div class="lobby-card-head friends-head"><h3>Your friends</h3><span id="friends-count">0</span></div><div class="lobby-list" id="friends-list"></div></section></div></div>
       <div class="lobby-content" id="matches-tab" role="tabpanel" hidden><section class="lobby-card"><div class="lobby-card-head"><div><h3>Set up a match</h3><p>We’ll give you a link to send to your friend.</p></div><button class="host-button" id="host-match" type="button">＋ Host a game</button></div><div class="share-match" id="share-match" hidden><span id="share-match-text">Your match is ready.</span><button id="copy-match-link" type="button">Copy invite link</button></div></section><section class="lobby-card open-matches-card"><div class="lobby-card-head"><h3>Open tables</h3><span id="match-count">0</span></div><div class="lobby-list" id="matches-list"></div></section><div class="join-row"><label for="match-code">Have a game link or code?</label><div><input id="match-code" placeholder="Paste it here"><button id="join-match" type="button">Join game</button></div></div></div>
       <div class="lobby-toast" id="lobby-toast" role="status" aria-live="polite"></div>
@@ -93,9 +112,37 @@
     </section>
   </div>
 
+  <div class="lobby-backdrop" id="training-modal" hidden>
+    <section class="lobby-dialog training-dialog" role="dialog" aria-modal="true" aria-labelledby="training-heading">
+      <div class="lobby-top"><div><p class="eyebrow">WChess tactical studio</p><h2 id="training-heading">Train the winning pattern.</h2><p class="lobby-subtitle">59 themed, answer-checked puzzles. Solve the line on the board; your progress stays on this device.</p></div><button class="lobby-close" id="close-training" type="button" aria-label="Close tactics trainer">×</button></div>
+      <div class="training-layout">
+        <aside class="training-sidebar">
+          <label for="training-filter">Choose a method</label>
+          <select id="training-filter"><option value="all">All 59 lessons</option></select>
+          <div class="training-progress"><span class="training-progress-mark" aria-hidden="true">♞</span><div><strong id="training-solved">0 solved</strong><small id="training-streak">Best streak: 0</small><small id="training-attempts">0 attempts</small></div></div>
+          <p class="training-howto"><strong>How to train</strong><br>Find the best continuation. The opponent’s replies play automatically. Use Hint for a nudge or Reveal to study the full line.</p>
+          <details class="training-reference-notes"><summary>Fast checkmate recognition cues</summary><ul><li><strong>Back rank:</strong> Look for a rook or queen reaching the home rank while the king is boxed in by its own pawns.</li><li><strong>Rook + knight:</strong> The knight protects the rook and seals escape squares; the Arabian pattern mates the king in a corner.</li><li><strong>h7/h2 hook:</strong> A queen–bishop battery or Greek Gift bishop sacrifice can expose a castled king; calculate the follow-up before sacrificing.</li><li><strong>Dovetail:</strong> A close queen check works when friendly pieces or the edge block the king’s diagonal exits.</li><li><strong>Bishop + knight clamp:</strong> The bishop cuts off a diagonal while the knight delivers checkmate.</li><li><strong>Smothered mate:</strong> A knight finishes when the king is trapped by its own pieces; double check can force the king into the net.</li></ul><a href="https://www.youtube.com/watch?v=iBZLU1FXhcI" target="_blank" rel="noopener noreferrer">Open the referenced lesson video</a></details>
+          <p class="training-source">Puzzle positions: Lichess open puzzle database (CC0). Theme names and explanations follow its public taxonomy.</p>
+        </aside>
+        <section class="training-main" aria-label="Tactical puzzle">
+          <div class="training-puzzle-meta"><span id="training-index">Lesson 1 of 59</span><span id="training-rating">Rating —</span></div>
+          <h3 id="training-title">Loading lesson…</h3>
+          <p id="training-description" class="training-description"></p>
+          <div class="training-board-shell"><div class="training-board" id="training-board" role="group" aria-label="Tactics puzzle board"></div></div>
+          <div class="training-promotion" id="training-promotion" hidden aria-label="Choose promotion piece"></div>
+          <p id="training-status" class="training-status" aria-live="polite">Find the strongest move.</p>
+          <div class="training-actions"><button class="tool-button" id="training-prev" type="button">Previous</button><button class="tool-button" id="training-hint" type="button">Hint</button><button class="tool-button" id="training-reveal" type="button">Reveal line</button><button class="tool-button" id="training-reset" type="button">Retry</button><button class="host-button" id="training-next" type="button">Next puzzle</button></div>
+          <p class="training-solution" id="training-solution" hidden></p>
+          <a class="training-source-link" id="training-source-link" target="_blank" rel="noopener noreferrer" hidden>View original Lichess game</a>
+        </section>
+      </div>
+    </section>
+  </div>
+
   <div class="promotion-backdrop" id="promotion" hidden>
     <section class="promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotion-title"><p class="eyebrow">A pawn’s next chapter</p><h2 id="promotion-title">Choose your piece.</h2><p>What would you like this pawn to become?</p><div class="promotion-options" id="promotion-options"></div></section>
   </div>
-  <script type="module" src="./app.js?v=6"></script>
+  <div class="global-toast" id="global-toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js?v=8"></script>
 </body>
 </html>

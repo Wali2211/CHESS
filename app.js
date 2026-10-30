@@ -29,11 +29,25 @@ let aiColor = 'b';
 let aiWorker = null;
 let aiThinking = false;
 let aiRequestId = 0;
+import './training-ui.js';
 const AI_LEVELS = { beginner:'Beginner', intermediate:'Intermediate', expert:'Expert' };
 const soundKey = 'wchess-sound';
 let soundEnabled = localStorage.getItem(soundKey) !== 'off';
 let audioContext = null;
 let animateMove = false;
+const uiPrefsKey = 'wchess-ui-settings';
+let uiPrefs = {};
+try { uiPrefs = JSON.parse(localStorage.getItem(uiPrefsKey) || '{}'); } catch {}
+let board3dEnabled = uiPrefs.board3d !== false;
+let boardTheme = ['jade','ocean','amethyst','walnut'].includes(uiPrefs.boardTheme) ? uiPrefs.boardTheme : 'jade';
+let boardTilt = Math.max(0, Math.min(14, Number(uiPrefs.boardTilt ?? 6)));
+let coordsEnabled = uiPrefs.coordsEnabled !== false;
+let hintsEnabled = uiPrefs.hintsEnabled !== false;
+let lastMoveEnabled = uiPrefs.lastMoveEnabled !== false;
+let soundVolume = Math.max(0, Math.min(1, Number(uiPrefs.soundVolume ?? 0.65)));
+let coachHint = null;
+let coachWorker = null;
+let coachThinking = false;
 
 async function api(path, options={}) {
   const response = await fetch(`/api${path}`, { ...options, headers: { 'content-type':'application/json', ...(options.headers || {}) } });
@@ -82,10 +96,12 @@ function render() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `square ${(file.charCodeAt(0) - 97 + rank) % 2 ? 'dark' : 'light'}`;
-    if (last && (last.from === square || last.to === square)) button.classList.add('last');
+    if (lastMoveEnabled && last && (last.from === square || last.to === square)) button.classList.add('last');
     if (moving && last?.to === square) button.classList.add('arriving', ...(last.captured ? ['capture-moment'] : []));
     if (selected === square) button.classList.add('selected');
-    if (targets.has(square)) button.classList.add('legal', ...(piece ? ['capture'] : []));
+    if (hintsEnabled && targets.has(square)) button.classList.add('legal', ...(piece ? ['capture'] : []));
+    if (coachHint?.from === square) button.classList.add('coach-from');
+    if (coachHint?.to === square) button.classList.add('coach-to');
     if (piece && piece.type === 'k' && piece.color === game.turn() && game.isCheck()) button.classList.add('checked');
     button.dataset.square = square;
     button.setAttribute('aria-label', `${square}${piece ? `, ${colors[piece.color]} ${names[piece.type]}` : ', empty'}${targets.has(square) ? ', legal destination' : ''}`);
@@ -103,6 +119,7 @@ function render() {
     fragment.append(button);
   }));
   board.replaceChildren(fragment);
+  applyBoardSettings();
   if (moving && last?.from && last?.to) {
     const source=board.querySelector(`[data-square="${last.from}"]`);
     const piece=board.querySelector(`[data-square="${last.to}"] .piece`);
@@ -127,13 +144,14 @@ function render() {
   badge.closest('.pill').classList.toggle('is-mate',status.state==='checkmate');
   $('move-number').textContent=`Move ${Math.floor(history.length / 2) + 1}`;
   $('turn-icon').textContent=symbols[game.turn()].k;
-  $('turn-icon').style.background=game.turn() === 'w' ? '#f0dec9' : '#4a304a';
-  $('turn-icon').style.color=game.turn() === 'w' ? '#402b3a' : '#f8ece3';
+  $('turn-icon').style.background=game.turn() === 'w' ? '#eee2cc' : '#27583f';
+  $('turn-icon').style.color=game.turn() === 'w' ? '#203b2a' : '#f1f5e8';
   $('turn-icon').classList.toggle('in-check',game.isCheck());
   updateSoundButton();
   $('undo').disabled=!history.length || !!activeMatchId || aiThinking;
   updatePlayer('top-player', flipped ? 'w' : 'b', status.over);
   updatePlayer('bottom-player', flipped ? 'b' : 'w', status.over);
+  renderStats(history);
   renderHistory(history);
 }
 
@@ -197,7 +215,7 @@ function playMove(move) {
   catch { return; }
   animateMove=true;
   playSound(game.isGameOver() ? 'finish' : played?.captured ? 'capture' : game.isCheck() ? 'check' : 'move');
-  selected=null; legal=[]; pending=null;
+  coachHint=null; selected=null; legal=[]; pending=null;
   $('promotion').hidden=true;
   render();
   if (activeMatchId) publishMatchState();
@@ -218,7 +236,7 @@ function showPromotion() {
 }
 
 function notify(message) {
-  const toast=$('lobby-toast');
+  const toast=$('lobby').hidden ? $('global-toast') : $('lobby-toast');
   toast.textContent=message;
   toast.classList.add('show');
   clearTimeout(toastTimer);
@@ -232,8 +250,45 @@ function updateSoundButton() {
   button.title=soundEnabled?'Sound effects are on':'Sound effects are off';
   $('sound-label').textContent=soundEnabled?'Sound on':'Sound off';
 }
+function saveUiPrefs() {
+  uiPrefs = { board3d:board3dEnabled, boardTheme, boardTilt, coordsEnabled, hintsEnabled, lastMoveEnabled, soundVolume };
+  localStorage.setItem(uiPrefsKey, JSON.stringify(uiPrefs));
+}
+function setToggle(id, enabled, onText, offText) {
+  const button=$(id);
+  if (!button) return;
+  button.setAttribute('aria-pressed',String(enabled));
+  if (onText) button.textContent=enabled?onText:offText;
+}
+function applyBoardSettings() {
+  document.documentElement.dataset.boardTheme=boardTheme;
+  const shell=$('board-shell');
+  shell.classList.toggle('mode-3d',board3dEnabled);
+  shell.classList.toggle('mode-flat',!board3dEnabled);
+  shell.style.setProperty('--board-tilt',`${boardTilt}deg`);
+  board.classList.toggle('coords-off',!coordsEnabled);
+  board.classList.toggle('hints-off',!hintsEnabled);
+  board.classList.toggle('last-off',!lastMoveEnabled);
+  $('board-theme').value=boardTheme;
+  $('tilt-slider').value=String(boardTilt);
+  $('sound-volume').value=String(soundVolume);
+  setToggle('view-3d',board3dEnabled);
+  setToggle('coords-toggle',coordsEnabled,'Coordinates on','Coordinates off');
+  setToggle('hints-toggle',hintsEnabled,'Move hints on','Move hints off');
+  setToggle('last-toggle',lastMoveEnabled,'Last move on','Last move off');
+}
+function renderStats(history) {
+  const values={p:1,n:3,b:3,r:5,q:9};
+  const score={w:0,b:0};
+  for (const piece of game.board().flat()) if (piece && values[piece.type]) score[piece.color]+=values[piece.type];
+  const advantage=score.w-score.b;
+  $('stat-plies').textContent=String(history.length);
+  $('stat-captures').textContent=String(history.filter(move=>move.captured).length);
+  $('stat-checks').textContent=String(history.filter(move=>move.san.includes('+')||move.san.includes('#')).length);
+  $('stat-material').textContent=advantage===0?'0':`${advantage>0?'+':''}${advantage}`;
+}
 function playSound(kind='move') {
-  if (!soundEnabled) return;
+  if (!soundEnabled || soundVolume<=0) return;
   const AudioContextClass=window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   try {
@@ -247,7 +302,7 @@ function playSound(kind='move') {
     for (const note of notes) {
       const start=now+note.delay, oscillator=audioContext.createOscillator(), gain=audioContext.createGain();
       oscillator.type='triangle'; oscillator.frequency.setValueAtTime(note.frequency,start);
-      gain.gain.setValueAtTime(.0001,start); gain.gain.exponentialRampToValueAtTime(note.volume,start+.012); gain.gain.exponentialRampToValueAtTime(.0001,start+note.duration);
+      gain.gain.setValueAtTime(.0001,start); gain.gain.exponentialRampToValueAtTime(note.volume*soundVolume,start+.012); gain.gain.exponentialRampToValueAtTime(.0001,start+note.duration);
       oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(start); oscillator.stop(start+note.duration+.015);
     }
   } catch { /* Sound is an enhancement; the game should still work if audio is unavailable. */ }
@@ -423,6 +478,10 @@ function cancelAi() {
   aiRequestId++;
   aiThinking=false;
   if (aiWorker) { aiWorker.terminate(); aiWorker=null; }
+  coachHint=null;
+  if (coachWorker) { coachWorker.terminate(); coachWorker=null; }
+  coachThinking=false;
+  if ($('coach-hint')) { $('coach-hint').disabled=false; $('coach-hint').textContent='Coach hint'; }
 }
 function finishAiMove(requestId, move) {
   if (requestId!==aiRequestId) return;
@@ -432,7 +491,7 @@ function finishAiMove(requestId, move) {
   let played;
   try { played=game.move(move); }
   catch { render(); notify('The AI returned an invalid move. Please start a new game.'); return; }
-  animateMove=true;
+  animateMove=true; coachHint=null;
   playSound(game.isGameOver()?'finish':played?.captured?'capture':game.isCheck()?'check':'move');
   render();
 }
@@ -492,8 +551,18 @@ function undoMove() {
 }
 
 $('undo').addEventListener('click',undoMove);
-$('flip').addEventListener('click',()=>{ flipped=!flipped; render(); });
+$('flip').addEventListener('click',()=>{ flipped=!flipped; const shell=$('board-shell'); shell.classList.remove('turning'); void shell.offsetWidth; shell.classList.add('turning'); render(); setTimeout(()=>shell.classList.remove('turning'),850); });
+$('view-3d').addEventListener('click',()=>{ board3dEnabled=!board3dEnabled; saveUiPrefs(); render(); });
+$('board-theme').addEventListener('change',event=>{ boardTheme=event.target.value; saveUiPrefs(); render(); });
+$('tilt-slider').addEventListener('input',event=>{ boardTilt=Number(event.target.value); saveUiPrefs(); applyBoardSettings(); });
+$('coords-toggle').addEventListener('click',()=>{ coordsEnabled=!coordsEnabled; saveUiPrefs(); render(); });
+$('hints-toggle').addEventListener('click',()=>{ hintsEnabled=!hintsEnabled; saveUiPrefs(); render(); });
+$('last-toggle').addEventListener('click',()=>{ lastMoveEnabled=!lastMoveEnabled; saveUiPrefs(); render(); });
+$('sound-volume').addEventListener('input',event=>{ soundVolume=Number(event.target.value); saveUiPrefs(); });
 $('sound-toggle').addEventListener('click',()=>{ soundEnabled=!soundEnabled; localStorage.setItem(soundKey,soundEnabled?'on':'off'); updateSoundButton(); if(soundEnabled) playSound('move'); });
+$('copy-fen').addEventListener('click',()=>copyToClipboard(game.fen(),'FEN copied.'));
+$('copy-pgn').addEventListener('click',()=>game.history().length?copyToClipboard(game.pgn(),'PGN copied.'):notify('Play a move before exporting the PGN.'));
+$('coach-hint').addEventListener('click',requestCoachHint);
 $('new-game').addEventListener('click',async()=>{ if (activeMatchId) await leaveOnlineMatch(false); cancelAi(); game.reset(); selected=null; legal=[]; pending=null; $('promotion').hidden=true; render(); if(aiMode && aiColor==='w') scheduleAiMove(); });
 $('open-lobby').addEventListener('click',async()=>{ $('display-name').value=displayName; $('player-id-label').textContent=playerId.slice(0,8).toUpperCase(); $('lobby').hidden=false; switchTab('people'); await heartbeat(); await refreshSocial(); });
 $('open-ai').addEventListener('click',()=>{ $('ai-modal').hidden=false; document.querySelector('.ai-level.selected')?.focus(); });
@@ -533,3 +602,49 @@ async function init() {
   if (invite) { $('match-code').value=invite; $('lobby').hidden=false; switchTab('matches'); await joinMatch(invite); }
 }
 init();
+
+
+async function copyToClipboard(value, message) {
+  try {
+    await navigator.clipboard.writeText(value);
+    notify(message);
+  } catch {
+    const input=document.createElement('textarea');
+    input.value=value; input.setAttribute('readonly',''); input.style.position='fixed'; input.style.opacity='0';
+    document.body.append(input); input.select();
+    const copied=document.execCommand('copy'); input.remove();
+    notify(copied?message:'Clipboard access was unavailable in this browser.');
+  }
+}
+function requestCoachHint() {
+  if (activeMatchId) { notify('The coach is available in local games, not synchronized matches.'); return; }
+  if (aiThinking) { notify('Wait for the computer to finish its move first.'); return; }
+  if (coachThinking) return;
+  if (game.isGameOver()) { notify('Start a new game to ask the coach.'); return; }
+  if (aiMode && game.turn()===aiColor) { notify('It is the computer’s turn.'); return; }
+  if (typeof Worker==='undefined') { notify('This browser does not support the WChess coach worker.'); return; }
+  const position=game.pgn();
+  let worker;
+  try { worker=new Worker(new URL('./ai-worker.js',import.meta.url),{type:'module'}); }
+  catch { notify('The coach could not start in this browser.'); return; }
+  coachWorker=worker; coachThinking=true;
+  const button=$('coach-hint'); button.disabled=true; button.textContent='Thinking…';
+  worker.onmessage=event=>{
+    if (worker!==coachWorker) { worker.terminate(); return; }
+    worker.terminate(); coachWorker=null; coachThinking=false; button.disabled=false; button.textContent='Coach hint';
+    if (game.pgn()!==position) return;
+    if (event.data.error || !event.data.move) { notify(event.data.error || 'The coach found no move.'); return; }
+    const candidate=event.data.move;
+    const legalMove=game.moves({verbose:true}).find(move=>move.from===candidate.from&&move.to===candidate.to&&(move.promotion||undefined)===(candidate.promotion||undefined));
+    if (!legalMove) { notify('The coach suggestion is no longer legal.'); return; }
+    coachHint={from:legalMove.from,to:legalMove.to};
+    render();
+    notify(`Coach suggests ${legalMove.san}. The two squares are highlighted.`);
+  };
+  worker.onerror=()=>{
+    if (worker!==coachWorker) return;
+    worker.terminate(); coachWorker=null; coachThinking=false; button.disabled=false; button.textContent='Coach hint';
+    notify('The coach worker stopped unexpectedly. Please try again.');
+  };
+  worker.postMessage({pgn:position,level:aiMode?aiLevel:'intermediate'});
+}
