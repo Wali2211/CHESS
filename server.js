@@ -156,6 +156,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET') {
+      if (pathname === '/downloads/WChess.apk') {
+        const file = path.join(ROOT, 'downloads', 'WChess.apk');
+        if (!fs.existsSync(file)) return routeError(res, 404, 'Android app download not found.');
+        res.writeHead(200, {
+          'content-type':'application/vnd.android.package-archive',
+          'content-disposition':'attachment; filename="WChess-1.5.apk"',
+          'content-length':fs.statSync(file).size,
+          'cache-control':'no-cache',
+          'x-content-type-options':'nosniff'
+        });
+        return fs.createReadStream(file).pipe(res);
+      }
       const safe = new Set(['/','/index.html','/app.js','/chess.js','/layout.css','/ai-worker.js','/ai-engine.js']);
       const file = pathname === '/' ? path.join(ROOT, 'index.html') : safe.has(pathname) ? path.join(ROOT, pathname.slice(1)) : null;
       if (!file) return routeError(res, 404, 'Not found.');

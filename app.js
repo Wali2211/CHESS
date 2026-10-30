@@ -44,17 +44,28 @@ async function api(path, options={}) {
 function post(path, body) { return api(path, { method:'POST', body:JSON.stringify(body) }); }
 
 function resultText() {
-  if (game.isCheckmate()) return { title: aiMode ? (game.turn()===aiColor?'You got me':'WChess AI takes this one') : `${colors[game.turn() === 'w' ? 'b' : 'w']} wins`, detail:'That was a fine finish. Fancy another?', over:true };
-  if (game.isStalemate()) return { title:'A draw by stalemate', detail:'No legal moves, and no check. The game ends level.', over:true };
-  if (game.isThreefoldRepetition()) return { title:'A draw by repetition', detail:'The same position came around three times.', over:true };
-  if (game.isInsufficientMaterial()) return { title:'A draw — not enough pieces', detail:'Neither side has enough left to force checkmate.', over:true };
-  if (game.isDraw()) return { title:'A draw', detail:'Fifty moves without a pawn move or capture. Fair enough.', over:true };
-  if (activeMatchId && matchMeta?.status === 'open') return { title:'Your table is ready', detail:'Send the invite to a friend, or keep an eye out for them.', over:false };
-  let detail = game.isCheck() ? 'Your king is under threat. Find a safe square.' : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : game.history().length ? 'No rush. Look over the board and choose your move.' : 'White has the first move. Select a piece to see your options.';
-  if (activeMatchId && myColor !== game.turn()) detail = `Waiting for ${matchMeta?.[game.turn() === 'w' ? 'hostName' : 'guestName'] || 'your opponent'} to make a move.`;
-  if (aiMode) detail = game.turn()===aiColor ? (aiThinking ? `${AI_LEVELS[aiLevel]} is thinking…` : `${AI_LEVELS[aiLevel]} is ready when you are.`) : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : 'Your move. The computer will take its turn after you.';
-  const title=aiMode ? (game.turn()===aiColor ? `${AI_LEVELS[aiLevel]} AI to move` : 'Your move') : `${colors[game.turn()]} to move`;
-  return { title:`${title}${game.isCheck() ? ' — check' : ''}`, detail, over:false };
+  if (game.isCheckmate()) {
+    const winner=game.turn()==='w'?'b':'w';
+    const victory=aiMode ? (winner===aiColor?'WChess AI wins.':'You win!') : `${colors[winner]} wins.`;
+    return { title:'Checkmate!', detail:`${victory} That was a fine finish. Fancy another?`, over:true, state:'checkmate' };
+  }
+  if (game.isStalemate()) return { title:'A draw by stalemate', detail:'No legal moves, and no check. The game ends level.', over:true, state:'draw' };
+  if (game.isThreefoldRepetition()) return { title:'A draw by repetition', detail:'The same position came around three times.', over:true, state:'draw' };
+  if (game.isInsufficientMaterial()) return { title:'A draw — not enough pieces', detail:'Neither side has enough left to force checkmate.', over:true, state:'draw' };
+  if (game.isDraw()) return { title:'A draw', detail:'Fifty moves without a pawn move or capture. Fair enough.', over:true, state:'draw' };
+  if (activeMatchId && matchMeta?.status === 'open') return { title:'Your table is ready', detail:'Send the invite to a friend, or keep an eye out for them.', over:false, state:'ready' };
+  const checked=game.isCheck();
+  let detail = checked ? `${colors[game.turn()]} is in check. Find a safe move.` : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : game.history().length ? 'No rush. Look over the board and choose your move.' : 'White has the first move. Select a piece to see your options.';
+  if (activeMatchId && myColor !== game.turn()) {
+    const opponent=matchMeta?.[game.turn() === 'w' ? 'hostName' : 'guestName'] || 'your opponent';
+    detail=checked ? `${colors[game.turn()]} is in check. Waiting for ${opponent} to respond.` : `Waiting for ${opponent} to make a move.`;
+  }
+  if (aiMode) {
+    detail=game.turn()===aiColor ? (aiThinking ? `${AI_LEVELS[aiLevel]} is thinking…` : `${AI_LEVELS[aiLevel]} is ready when you are.`) : selected ? `${colors[game.turn()]} ${names[game.get(selected).type]} picked. Choose a highlighted square.` : 'Your move. The computer will take its turn after you.';
+    if (checked) detail=game.turn()===aiColor ? `${AI_LEVELS[aiLevel]} is in check and ${aiThinking?'searching for a safe move':'must find a safe move'}.` : 'Your king is in check. Find a safe move.';
+  }
+  const turn=aiMode ? (game.turn()===aiColor ? `${AI_LEVELS[aiLevel]} AI to move` : 'Your move') : `${colors[game.turn()]} to move`;
+  return { title:checked ? `Check — ${turn}` : turn, detail, over:false, state:checked?'check':game.history().length?'playing':'ready' };
 }
 
 function render() {
@@ -109,11 +120,16 @@ function render() {
   const status = resultText();
   $('status').textContent=status.title;
   $('status-detail').textContent=status.detail;
-  $('game-badge').textContent=activeMatchId ? (matchMeta?.status === 'open' ? 'Waiting for player' : 'Online match') : aiMode ? `${AI_LEVELS[aiLevel]} AI` : status.over ? 'That’s the game' : history.length ? 'A game in progress' : 'Ready for the first move';
+  $('status-panel').dataset.state=status.state || (status.over?'finished':history.length?'playing':'ready');
+  const badge=$('game-badge');
+  badge.textContent=status.state==='check'?'Check!':status.state==='checkmate'?'Checkmate':activeMatchId ? (matchMeta?.status === 'open' ? 'Waiting for player' : 'Online match') : aiMode ? `${AI_LEVELS[aiLevel]} AI` : status.over ? 'That’s the game' : history.length ? 'A game in progress' : 'Ready for the first move';
+  badge.closest('.pill').classList.toggle('is-check',status.state==='check');
+  badge.closest('.pill').classList.toggle('is-mate',status.state==='checkmate');
   $('move-number').textContent=`Move ${Math.floor(history.length / 2) + 1}`;
   $('turn-icon').textContent=symbols[game.turn()].k;
   $('turn-icon').style.background=game.turn() === 'w' ? '#f0dec9' : '#4a304a';
   $('turn-icon').style.color=game.turn() === 'w' ? '#402b3a' : '#f8ece3';
+  $('turn-icon').classList.toggle('in-check',game.isCheck());
   updateSoundButton();
   $('undo').disabled=!history.length || !!activeMatchId || aiThinking;
   updatePlayer('top-player', flipped ? 'w' : 'b', status.over);
@@ -408,28 +424,52 @@ function cancelAi() {
   aiThinking=false;
   if (aiWorker) { aiWorker.terminate(); aiWorker=null; }
 }
+function finishAiMove(requestId, move) {
+  if (requestId!==aiRequestId) return;
+  if (aiWorker) { aiWorker.terminate(); aiWorker=null; }
+  aiThinking=false;
+  if (!move) { render(); notify('The AI could not find a legal move. Start a new game to try again.'); return; }
+  let played;
+  try { played=game.move(move); }
+  catch { render(); notify('The AI returned an invalid move. Please start a new game.'); return; }
+  animateMove=true;
+  playSound(game.isGameOver()?'finish':played?.captured?'capture':game.isCheck()?'check':'move');
+  render();
+}
+function fallbackAiMove(requestId) {
+  import('./ai-engine.js').then(({chooseMove})=>{
+    setTimeout(()=>{
+      if (requestId!==aiRequestId) return;
+      try {
+        const move=chooseMove(game,aiLevel);
+        finishAiMove(requestId,move?{from:move.from,to:move.to,promotion:move.promotion}:null);
+      } catch (error) {
+        if (requestId!==aiRequestId) return;
+        aiThinking=false; render(); notify(`The local AI could not finish its search: ${error.message}`);
+      }
+    },30);
+  }).catch(error=>{
+    if (requestId!==aiRequestId) return;
+    aiThinking=false; render(); notify(`The WChess AI could not load: ${error.message}`);
+  });
+}
 function scheduleAiMove() {
   if (!aiMode || aiThinking || game.isGameOver() || game.turn()!==aiColor) return;
-  if (typeof Worker==='undefined') { notify('This browser does not support the WChess AI worker.'); return; }
   const requestId=++aiRequestId;
   aiThinking=true; selected=null; legal=[]; render();
+  if (typeof Worker==='undefined') { fallbackAiMove(requestId); return; }
   let worker;
   try { worker=new Worker(new URL('./ai-worker.js',import.meta.url),{type:'module'}); }
-  catch { aiThinking=false; render(); notify('The WChess AI could not start in this browser.'); return; }
+  catch { fallbackAiMove(requestId); return; }
   aiWorker=worker;
   worker.onmessage=event=>{
     if (requestId!==aiRequestId) { worker.terminate(); return; }
-    worker.terminate(); aiWorker=null; aiThinking=false;
-    if (event.data.error || !event.data.move) { render(); notify(event.data.error || 'The AI could not find a move. Start a new game to try again.'); return; }
-    let played;
-    try { played=game.move(event.data.move); }
-    catch { render(); notify('The AI returned an invalid move. Please start a new game.'); return; }
-    animateMove=true;
-    playSound(game.isGameOver()?'finish':played?.captured?'capture':game.isCheck()?'check':'move');
-    render();
+    if (event.data.error || !event.data.move) { fallbackAiMove(requestId); return; }
+    finishAiMove(requestId,event.data.move);
   };
-  worker.onerror=()=>{ if(requestId!==aiRequestId)return; worker.terminate(); aiWorker=null; aiThinking=false; render(); notify('The AI worker stopped unexpectedly. Please try again.'); };
-  worker.postMessage({pgn:game.pgn(),level:aiLevel});
+  worker.onerror=()=>{ if(requestId!==aiRequestId)return; worker.terminate(); aiWorker=null; fallbackAiMove(requestId); };
+  try { worker.postMessage({pgn:game.pgn(),level:aiLevel}); }
+  catch { worker.terminate(); aiWorker=null; fallbackAiMove(requestId); }
 }
 async function startAiGame() {
   const selectedLevel=document.querySelector('.ai-level.selected')?.dataset.level || 'intermediate';

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#190f1d">
   <meta name="description" content="A relaxed place to play chess. Challenge a friend, meet a player, or take on the computer.">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./layout.css?v=6">
+  <link rel="stylesheet" href="./layout.css?v=7">
   <title>WChess — A good game starts here</title>
 </head>
 <body>
@@ -59,7 +59,7 @@
       </section>
 
       <aside class="side" aria-label="Game details">
-        <section class="status-panel">
+        <section class="status-panel" id="status-panel">
           <div class="status-top"><span class="pill"><span class="pill-dot" aria-hidden="true"></span><span id="game-badge">Ready when you are</span></span><span class="move-number" id="move-number">Move 1</span></div>
           <div class="turn-icon" id="turn-icon" aria-hidden="true">♔</div>
           <p class="status-overline">AT THE BOARD</p>
@@ -72,7 +72,7 @@
         <div class="local-note"><span class="note-icon" aria-hidden="true">✦</span><p><strong>Chess, without the ceremony.</strong><br>Play locally, invite a friend, or join a game. No sign-up required.</p></div>
       </aside>
     </div>
-    <footer class="footer"><span class="footer-made"><span class="footer-knight" aria-hidden="true">♞</span>Created by Muhammed Wali bin Ismail</span><span class="footer-note"><span aria-hidden="true">✧</span>64 squares. No hurry.</span></footer>
+    <footer class="footer"><span class="footer-made"><span class="footer-knight" aria-hidden="true">♞</span>Created by Muhammed Wali bin Ismail</span><a class="app-download" href="/downloads/WChess.apk" download="WChess-1.5.apk">↓ Download Android app <small>v1.5</small></a><span class="footer-note"><span aria-hidden="true">✧</span>64 squares. No hurry.</span></footer>
   </main>
 
   <div class="lobby-backdrop" id="lobby" hidden>
@@ -89,7 +89,7 @@
   <div class="lobby-backdrop" id="ai-modal" hidden>
     <section class="lobby-dialog ai-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-title">
       <div class="lobby-top"><div><p class="eyebrow">A game on your own terms</p><h2 id="ai-title">Pick your opponent.</h2><p class="lobby-subtitle">Choose a level and a side. The computer plays right here in your browser.</p></div><button class="lobby-close" id="close-ai" type="button" aria-label="Close">×</button></div>
-      <div class="ai-options"><span class="section-label">How tough should it be?</span><div class="ai-levels" role="group" aria-label="Choose AI difficulty"><button class="ai-level" type="button" data-level="beginner" aria-pressed="false"><strong><span class="difficulty-icon" aria-hidden="true">♙</span>A gentle start</strong><small>Beginner · a relaxed game to find your feet.</small></button><button class="ai-level selected" type="button" data-level="intermediate" aria-pressed="true"><strong><span class="difficulty-icon" aria-hidden="true">♞</span>A thoughtful game</strong><small>Intermediate · a little more to think about.</small></button><button class="ai-level" type="button" data-level="expert" aria-pressed="false"><strong><span class="difficulty-icon" aria-hidden="true">♛</span>Bring your best</strong><small>Expert · deeper search, so a move can take a few seconds.</small></button></div><div class="ai-side"><label for="ai-color">Which side would you like?</label><select id="ai-color"><option value="w">White — I’ll start</option><option value="b">Black — let the computer start</option></select></div><button class="host-button ai-start" id="start-ai" type="button">Let’s play</button><p class="ai-note">The computer thinks locally in your browser. Expert is tougher, not unbeatable.</p></div>
+      <div class="ai-options"><span class="section-label">How tough should it be?</span><div class="ai-levels" role="group" aria-label="Choose AI difficulty"><button class="ai-level" type="button" data-level="beginner" aria-pressed="false"><strong><span class="difficulty-icon" aria-hidden="true">♙</span>A gentle start</strong><small>Beginner · a relaxed game to find your feet.</small></button><button class="ai-level selected" type="button" data-level="intermediate" aria-pressed="true"><strong><span class="difficulty-icon" aria-hidden="true">♞</span>A thoughtful game</strong><small>Intermediate · a little more to think about.</small></button><button class="ai-level" type="button" data-level="expert" aria-pressed="false"><strong><span class="difficulty-icon" aria-hidden="true">♛</span>Bring your best</strong><small>Expert · deeper search, so a move can take a few seconds.</small></button></div><div class="ai-side"><label for="ai-color">Which side would you like?</label><select id="ai-color"><option value="w">White — I’ll start</option><option value="b">Black — let the computer start</option></select></div><button class="host-button ai-start" id="start-ai" type="button">Let’s play</button><p class="ai-note">WChess uses a real chess-search engine on your device. It runs locally; Expert searches deeper.</p></div>
     </section>
   </div>
 
